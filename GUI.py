@@ -221,7 +221,7 @@ class GUI:
 
     # entry method
     def recognize_layout(self, is_save=True):
-        start = time.clock()
+        start = time.perf_counter()
         self.cvt_compos_json_to_dataframe()
         self.recognize_groups()
         self.cvt_groups_to_list_compos()
@@ -229,7 +229,7 @@ class GUI:
         self.get_layout_result_imgs()
         if is_save:
             self.save_layout_result()
-        print("[Layout Recognition Completed in %.3f s] Input: %s Output: %s" % (time.clock() - start, self.img_file, pjoin(self.layout_dir, self.file_name + '.json')))
+        print("[Layout Recognition Completed in %.3f s] Input: %s Output: %s" % (time.perf_counter() - start, self.img_file, pjoin(self.layout_dir, self.file_name + '.json')))
         # print(time.ctime(), '\n\n')
 
     '''
