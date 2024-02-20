@@ -30,7 +30,6 @@ def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None,
     else:
         detect_all_widget = False
     img_widget_list = []  # store widget appear in image, and appear in widget list.
-    write_image = True  # write VinsWithLabel.png
     # collect annotation from xml file.
     tree = ET.parse(image_ant_path)
     root = tree.getroot()
@@ -107,10 +106,27 @@ def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None,
             }
             comp_json["compos"].append(non_text_comp)
             comp_id += 1
+    ocr_root = 'data/output/ocr'
+    text_path = pjoin(ocr_root, "Android_1.json")
+    save_text_json(text_path, text_json)
+    nonText_path = pjoin('data/output/ip', 'Android_1.json')
+    save_noText_json(nonText_path, comp_json)
     return comp_json, text_json
 
 
-def merge_comp_text(img_path, compo_json, text_json, merge_root=None, is_paragraph=False, is_remove_bar=True, show=False, wait_key=0):
+def save_noText_json(file_path, nonTexts):
+    f_out = open(file_path, 'w')
+    json.dump(nonTexts, f_out, indent=4)
+    f_out.close()
+
+
+def save_text_json(file_path, texts):
+    f_out = open(file_path, 'w')
+    json.dump(texts, f_out, indent=4)
+    f_out.close()
+
+
+def my_merge(img_path, compo_json, text_json, merge_root=None, is_paragraph=False, is_remove_bar=True, show=False, wait_key=0):
     # load text and non-text compo
     ele_id = 0
     compos = []
@@ -158,19 +174,15 @@ def merge_comp_text(img_path, compo_json, text_json, merge_root=None, is_paragra
 if __name__ == "__main__":
     # input_path = 'data/input/2.jpg'
     output_root = 'data/output'
-    jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_122.jpg"
-    xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_122.xml"
+    jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_1.jpg"
+    xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_1.xml"
     gui = GUI(img_file=jpg_file_path, output_dir=output_root)
-    non_text, text = parse_vins2dict(jpg_file_path, xml_file_path, None, False, False)
-    gui.detection_result_img['merge'], gui.compos_json = merge_comp_text(jpg_file_path, non_text, text, "data/output/uied",  is_remove_bar=True, is_paragraph=True, show=False)
+    cate_list = ["Image", "EditText", "Icon", "TextButton", "CheckBox", "Switch", "Spinner", "Text"]  # vins no radiobutton.
+    non_text, text = parse_vins2dict(jpg_file_path, xml_file_path, cate_list, False, True)
+    gui.detection_result_img['merge'], gui.compos_json = my_merge(jpg_file_path, non_text, text, "data/output/uied",  is_remove_bar=True, is_paragraph=True, show=True)
     gui.img_reshape = gui.compos_json['img_shape']
     gui.img_resized = cv2.resize(gui.img, (gui.img_reshape[1], gui.img_reshape[0]))
-    # gui.detect_element(True, True, True)
-    # # gui.load_detection_result()
-    # gui.load_detection_result()
-    # gui.visualize_element_detection()
-    # todo: compos_json assigned by function. (ref: uied folder). extract non-text, text compo, then merge, then load.
-    # gui.recognize_layout()
-    # gui.visualize_layout_recognition()
+    # todo: find out why text is gone, alter my_merge function output file name.
+    gui.recognize_layout()
+    gui.visualize_layout_recognition()
     print("end")
-    pass
