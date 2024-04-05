@@ -26,13 +26,14 @@ def show_elements(org_img, eles, show=False, win_name='element', wait_key=0, sho
     return img_resize
 
 
-def save_elements(output_file, elements, img_shape):
+def save_elements(output_file, elements, img_shape, write=True):
     components = {'compos': [], 'img_shape': img_shape}
     for i, ele in enumerate(elements):
         c = ele.wrap_info()
         # c['id'] = i
         components['compos'].append(c)
-    json.dump(components, open(output_file, 'w'), indent=4)
+    if write:
+        json.dump(components, open(output_file, 'w'), indent=4)
     return components
 
 
