@@ -6,24 +6,23 @@ from os.path import join as pjoin
 import xml.etree.ElementTree as ET  # for xml file
 import element.detect_merge.merge as merge
 from element.detect_merge.Element import Element
-
+import warnings
+import glob
 
 # ------ parse vins ------
 # below two path should be set to the corresponding image.
 def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None, show=False, write_image=False,
-               show_name="VinsWithLabel"):
+               show_name=""):
     """
     parse vins dataset.
     @param image_jpg_path: origin image file.
     @param image_ant_path: annotation file.
     @param specify_cate: specify component string category list. Vins widget names. If none, detect all.
     @param show: show annotated image.
-    @param write_image: # write annotated image.
-    @param show_name: write image name.
+    @param write_image: # write annotated image, write component file.
+    @param show_name: write image name, if empty, then set image file name.
     @return: sComponent List.
     """
-    # image_jpg_path = "E:\\VINS Dataset\\All Dataset\\iphone\\JPEGImages\\IMG_3790.jpg"  # origin image file
-    # image_ant_path = "E:\\VINS Dataset\\All Dataset\\iphone\\Annotations\\IMG_3790.xml"  # annotation file
     if specify_cate is None:
         specify_cate = []
         detect_all_widget = True
@@ -68,12 +67,12 @@ def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None,
         _y2 = widget[2] - labelSize[0][1]  # topright y of text
         cv2.rectangle(org_image, (widget[1], widget[2]), (_x2, _y2), red_color, cv2.FILLED)  # fill text background
         cv2.putText(org_image, widget[0], (widget[1], widget[2]), fontFace, 0.5, (0, 0, 0), 1)
-    show_name = show_name + ".png"
+    show_name = image_jpg_path.replace('\\', '/').split('/')[-1][:-4]
     if show:
         cv2.imshow(show_name, org_image)
         cv2.waitKey(0)
     if write_image:
-        cv2.imwrite(show_name, org_image)
+        cv2.imwrite(show_name+".png", org_image)
     comp_json, text_json = {"img_shape": [], "compos": []}, {"img_shape": [], "texts": []}
     comp_id, text_id = 1, 0  # Component 0 is background.
     text_json["img_shape"] = comp_json["img_shape"] = [org_image.shape[0], org_image.shape[1], org_image.shape[2]]
@@ -85,7 +84,7 @@ def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None,
                 "row_max": bottom,
                 "row_min": top,
                 "height": bottom-top,
-                "content": "",
+                "content": "fake texts",
                 "column_max": right,
                 "column_min": left,
                 "width": right-left
@@ -106,11 +105,12 @@ def parse_vins2dict(image_jpg_path: str, image_ant_path: str, specify_cate=None,
             }
             comp_json["compos"].append(non_text_comp)
             comp_id += 1
-    ocr_root = 'data/output/ocr'
-    text_path = pjoin(ocr_root, "Android_1.json")
-    save_text_json(text_path, text_json)
-    nonText_path = pjoin('data/output/ip', 'Android_1.json')
-    save_noText_json(nonText_path, comp_json)
+    # if write_image:  # for checking result is the same as main.py result.
+        # ocr_root = 'data/output/ocr'
+        # text_path = pjoin(ocr_root, show_name+".json")
+        # save_text_json(text_path, text_json)
+        # nonText_path = pjoin('data/output/ip', show_name+'.json')
+        # save_noText_json(nonText_path, comp_json)
     return comp_json, text_json
 
 
@@ -160,29 +160,71 @@ def my_merge(img_path, compo_json, text_json, merge_root=None, is_paragraph=Fals
     if is_paragraph:
         elements = merge.merge_text_line_to_paragraph(elements)
     merge.reassign_ids(elements)
-    merge.check_containment(elements)
+    merge.check_containment(elements)  # children or parent or none.
     board = merge.show_elements(img_resize, elements, show=show, win_name='elements after merging', wait_key=wait_key)
 
     # save all merged elements, clips and blank background
     name = img_path.replace('\\', '/').split('/')[-1][:-4]
-    components = merge.save_elements(pjoin(merge_root, name + '.json'), elements, img_resize.shape)
-    cv2.imwrite(pjoin(merge_root, name + '.jpg'), board)
-    print('[Merge Completed] Input: %s Output: %s' % (img_path, pjoin(merge_root, name + '.jpg')))
+    components = merge.save_elements(pjoin(merge_root, name + '.json'), elements, img_resize.shape, False)
+    # cv2.imwrite(pjoin(merge_root, name + '.jpg'), board)  # write uied file.
+    # print('[Merge Completed] Input: %s Output: %s' % (img_path, pjoin(merge_root, name + '.jpg')))
     return board, components
 
 
+def detect_listview_gridview_result():
+    """detect listview gridview result"""
+    in_jpg_folder = "E:\\Container Dataset\\test\\ground_truth\\None\\"
+    in_xml_folder = "E:\\VINS Dataset\\All Dataset\\Android\\Annotations\\"
+    all_jpg_path = glob.iglob(in_jpg_folder + "*.jpg")
+    outputResultDir = "E:\\Container Dataset\\test_result"
+    file_amount = 0
+    # result_dict = {"listView": 0, "gridView": 0, "None": 0}
+    result_dict = {"Group": 0, "None": 0}
+    for jpg_file_path in all_jpg_path:
+        file_amount += 1
+        file_id = jpg_file_path.split("\\")[-1].split(".")[0]
+        xml_file_path = in_xml_folder + "\\" + file_id + ".xml"
+        gui = GUI(img_file=jpg_file_path)
+        cate_list = ["Image", "EditText", "Icon", "TextButton", "CheckBox", "Switch", "Spinner",
+                     "Text"]  # vins no radiobutton.
+        non_text, text = parse_vins2dict(jpg_file_path, xml_file_path, cate_list, False, False)
+        gui.detection_result_img['merge'], gui.compos_json = my_merge(jpg_file_path, non_text, text, "data/output/uied",
+                                                                      is_remove_bar=False, is_paragraph=True,
+                                                                      show=False)
+        gui.img_reshape = gui.compos_json['img_shape']
+        gui.recognize_layout(is_save=False)
+        if len(gui.lists) >= 1:
+            result_dict["Group"] += 1
+            print("find group - end")
+        else:
+            result_dict["None"] += 1
+            print("not find - end")
+    print("check", file_amount, "files")
+    print(result_dict)
+
+
 if __name__ == "__main__":
+    warnings.simplefilter(action='ignore', category=FutureWarning)  # ignore pandas appends future warning(too much0
+    # detect_listview_gridview_result()  # group evaluation
     # input_path = 'data/input/2.jpg'
     output_root = 'data/output'
-    jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_1.jpg"
-    xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_1.xml"
+    jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_84.jpg"  # list view
+    xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_84.xml"
+    # jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_1.jpg"  # grid view
+    # xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_1.xml"
+    # jpg_file_path = r"E:\VINS Dataset\All Dataset\Android\JPEGImages\Android_2.jpg"  # none
+    # xml_file_path = r"E:\VINS Dataset\All Dataset\Android\Annotations\Android_2.xml"
+    # jpg_file_path = r"E:\VINS Dataset\All Dataset\iphone\JPEGImages\IMG_2907.jpg"  # list view, hard
+    # xml_file_path = r"E:\VINS Dataset\All Dataset\iphone\Annotations\IMG_2907.xml"
     gui = GUI(img_file=jpg_file_path, output_dir=output_root)
     cate_list = ["Image", "EditText", "Icon", "TextButton", "CheckBox", "Switch", "Spinner", "Text"]  # vins no radiobutton.
-    non_text, text = parse_vins2dict(jpg_file_path, xml_file_path, cate_list, False, True)
-    gui.detection_result_img['merge'], gui.compos_json = my_merge(jpg_file_path, non_text, text, "data/output/uied",  is_remove_bar=True, is_paragraph=True, show=True)
+    non_text, text = parse_vins2dict(jpg_file_path, xml_file_path, cate_list, False, False)
+    gui.detection_result_img['merge'], gui.compos_json = my_merge(jpg_file_path, non_text, text, "data/output/uied",  is_remove_bar=False, is_paragraph=True, show=False)
     gui.img_reshape = gui.compos_json['img_shape']
     gui.img_resized = cv2.resize(gui.img, (gui.img_reshape[1], gui.img_reshape[0]))
-    # todo: find out why text is gone, alter my_merge function output file name.
-    gui.recognize_layout()
-    gui.visualize_layout_recognition()
-    print("end")
+    gui.recognize_layout(is_save=False)
+    if len(gui.lists) >= 1:
+        print("find group - end")
+    else:
+        print("not find - end")
+    # gui.visualize_layout_recognition()
